@@ -1,79 +1,70 @@
-from fastapi import FastAPI
-app=FastAPI()
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from database import find_one_todo, find_all_todo, create_todo, update_todo, remove_todo
+import motor.motor_asyncio
 
+app = FastAPI()
+
+
+origins = ['https://localhost:3000']
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+client = motor.motor_asyncio.AsyncIOMotorClient('mongodb://localhost:27017/')
+database = client.TodoList
+collection = database.Todo
+
+@app.on_event("startup")
+async def startup_db_client():
+    try:
+      
+        await client.admin.command("ping")
+        print("Connected to MongoDB successfully!")
+    except Exception as e:
+        print("Failed to connect to MongoDB:", e)
+
+
+from models import Todo
+
+# Define endpoints
 @app.get('/')
-def read_root():
-    return {"name":"sreedhar"}
+async def read_roots():
+    return {"ping": "pong"}
 
-# @app.get('/items/{item_id}')
-# def read_input(item_id:int):
-#     return {'item_id':item_id}
+@app.get('/api/todo')
+async def get_todo():
+    response = await find_all_todo()
+    return response
 
-# @app.get('/users/me') 
-# def printnames():
-#     return {"name":"sreedhar"}
+@app.get('/api/todo/{title}', response_model=Todo)
+async def get_one_todo(title: str):
+    response = await find_one_todo(title)
+    if response:
+        return response
+    raise HTTPException(status_code=404, detail=f"Todo not found: {title}")
 
-# @app.get('/users/{name}')
-# def returnnames(name):
-#     return {'name':name}
+@app.post('/api/todo', response_model=Todo)
+async def post_todo(todo: Todo):
+    response = await create_todo(todo.dict())
+    if response:
+        return response
+    raise HTTPException(status_code=400, detail="Something went wrong")
 
-# from enum import Enum
-# class ModelName(str,Enum):
-#     alexnet="alexnet",
-#     resnet='resnet',
-#     lenet='lenet'
-# newapp=FastAPI()
-# @newapp.get("/models/{model_name}")
-# async def get_model(model_name: ModelName):
-#     if model_name is ModelName.alexnet:
-#         return {"model_name": model_name, "message": "Deep Learning FTW!"}
+@app.put('/api/todo/{title}', response_model=Todo)
+async def put_todo(title: str, description: str):
+    response = await update_todo(title, description)
+    if response:
+        return response
+    raise HTTPException(status_code=400, detail="Something went wrong")
 
-#     if model_name.value == "lenet":
-#         return {"model_name": model_name, "message": "LeCNN all the images"}
-
-#     return {"model_name": model_name, "message": "Have some residuals"}
-
-from enum import Enum
-class Model(str,Enum):
-    firstname="chetan"
-    lastname="jetty"
-    fathername="nettappa"
-    mothername="bhagyamma"
-    
-    
-@app.get('/models/{model_name}')
-def Modelnames(model_name:Model):
-    if model_name==Model.firstname:
-        return {"modelname":model_name,"details":"spring boot developer"}
-    if model_name.value=="jetty":
-        return {"modelname":model_name,"details":"django developer"}
-    return {"father_name":Model.fathername,"mothername":Model.mothername}
-        
-        
-        
-student={
-    1:{
-        'firstname':"sreedhar",
-        'lastname':"pedda pullannagar",
-        'mothername':'bhagyamma',
-        'fathername':'nettappa',
-    }
-}
-# in fastapis path must be starts with /
-
-@app.get('/get/{student_id}')
-def students(student_id:int):
-    return student[student_id]
-
-@app.get('/items/{item_id}')
-async def itemss(item_id):
-    return {"items":item_id}
-
-
-
-fake_items_db = [{"item_name": "Foo"}, {"item_name": "Bar"}, {"item_name": "Baz"}]
-@app.get('/fake_db/')
-async def read_items(skip:int=0,limit:int=10):
-    return fake_items_db[skip:skip+limit]
-
-
+@app.delete('/api/todo/{title}')
+async def del_todo(title: str):
+    response = await remove_todo(title)
+    if response:
+        return {"message": "Successfully deleted"}
+    raise HTTPException(status_code=400, detail="Something went wrong")
